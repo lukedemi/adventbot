@@ -1,0 +1,140 @@
+Transform: 'AWS::Serverless-2016-10-31'
+Parameters:
+  DomainName:
+    Type: String
+    Default: adventbot.com
+  CertificateARN:
+    Type: String
+    Default: arn:aws:acm:us-east-1:147689575901:certificate/7dad45de-e767-494f-abaa-dac45fe63eee
+  APIStage:
+    Type: String
+    Default: live
+Resources:
+  EntryLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      Runtime: ruby2.5
+      Handler: function.lambda_handler
+      CodeUri: ./code
+      Environment:
+        Variables:
+          DynamoDBTable: !Ref DynamoDBTable
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - DynamoDBCrudPolicy:
+            TableName: !Ref DynamoDBTable
+
+  lambdaApiGatewayInvoke:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      Action: "lambda:InvokeFunction"
+      FunctionName: !GetAtt "EntryLambda.Arn"
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${lambdaAPI}/*/*/random"
+
+  lambdaAPI:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: AdventBot
+      StageName: live
+      EndpointConfiguration: EDGE
+      DefinitionBody:
+        openapi: "3.0.0"
+        paths:
+          "/":
+            get:
+              responses:
+                "302":
+                  description: "302 response"
+                  headers:
+                    Location:
+                      schema:
+                        type: "string"
+                  content: {}
+              x-amazon-apigateway-integration:
+                responses:
+                  default:
+                    statusCode: "302"
+                    responseParameters:
+                      method.response.header.Location: "'https://github.com/lukedemi/adventbot'"
+                requestTemplates:
+                  application/json: "{\"statusCode\": 200}"
+                passthroughBehavior: "when_no_match"
+                type: "mock"
+          "/random":
+            post:
+              responses:
+                "200":
+                  description: "200 response"
+                  schema:
+                    $ref: "#/definitions/Empty"
+              x-amazon-apigateway-integration:
+                httpMethod: POST
+                type: aws
+                uri:
+                  !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${EntryLambda.Arn}/invocations
+                passthroughBehavior: NEVER
+                responses:
+                  "default":
+                    statusCode: "200"
+                requestTemplates:
+                  application/x-www-form-urlencoded: |
+                    {
+                      #foreach( $token in $input.path('$').split('&') )
+                          #set( $keyVal = $token.split('=') )
+                          #set( $keyValSize = $keyVal.size() )
+                          #if( $keyValSize >= 1 )
+                              #set( $key = $util.urlDecode($keyVal[0]) )
+                              #if( $keyValSize >= 2 )
+                                  #set( $val = $util.urlDecode($keyVal[1]) )
+                              #else
+                                  #set( $val = '' )
+                              #end
+                              "$key": "$util.escapeJavaScript($val)"#if($foreach.hasNext),#end
+                          #end
+                      #end
+                    }
+        x-amazon-apigateway-policy:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: "Allow"
+              Principal: "*"
+              Action:
+                - "execute-api:Invoke"
+              Resource: "execute-api:/*"
+
+  APIDomainName:
+    Type: 'AWS::ApiGateway::DomainName'
+    Properties:
+      CertificateArn: !Ref CertificateARN
+      DomainName: !Ref DomainName
+  APIBasePathMapping:
+    Type: 'AWS::ApiGateway::BasePathMapping'
+    Properties:
+      BasePath: ''
+      DomainName: !Ref APIDomainName
+      RestApiId: !Ref lambdaAPI
+      Stage: !Ref APIStage
+  APIDomain:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneName: !Join [ '', [ !Ref DomainName, '.' ] ]
+      RecordSets:
+      - Name: !Ref APIDomainName
+        Type: A
+        AliasTarget:
+          DNSName: !GetAtt APIDomainName.DistributionDomainName
+          HostedZoneId: Z2FDTNDATAQYW2 # static ID for CloudFront aliases
+
+  DynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        -
+          AttributeName: "SlackOrg"
+          AttributeType: "S"
+      KeySchema:
+        -
+          AttributeName: "SlackOrg"
+          KeyType: "HASH"
+      BillingMode: "PAY_PER_REQUEST"
