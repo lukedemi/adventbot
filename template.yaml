@@ -19,6 +19,9 @@ Resources:
       Environment:
         Variables:
           DynamoDBTable: !Ref DynamoDBTable
+          CLIENT_ID:
+          CLIENT_SECRET:
+          REDIRECT_URI:
       Policies:
         - AWSLambdaBasicExecutionRole
         - DynamoDBCrudPolicy:
@@ -30,7 +33,7 @@ Resources:
       Action: "lambda:InvokeFunction"
       FunctionName: !GetAtt "EntryLambda.Arn"
       Principal: "apigateway.amazonaws.com"
-      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${lambdaAPI}/*/*/random"
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${lambdaAPI}/*/*/*"
 
   lambdaAPI:
     Type: AWS::Serverless::Api
@@ -43,66 +46,56 @@ Resources:
         paths:
           "/":
             get:
+              consumes:
+              - "application/json"
               responses:
                 "302":
                   description: "302 response"
                   headers:
                     Location:
-                      schema:
-                        type: "string"
-                  content: {}
+                      type: "string"
               x-amazon-apigateway-integration:
                 responses:
                   default:
                     statusCode: "302"
                     responseParameters:
                       method.response.header.Location: "'https://github.com/lukedemi/adventbot'"
+                passthroughBehavior: "when_no_match"
                 requestTemplates:
                   application/json: "{\"statusCode\": 200}"
-                passthroughBehavior: "when_no_match"
                 type: "mock"
-          "/random":
-            post:
+          "/oauth":
+            get:
+              produces:
+              - "application/json"
               responses:
                 "200":
                   description: "200 response"
-                  schema:
-                    $ref: "#/definitions/Empty"
               x-amazon-apigateway-integration:
-                httpMethod: POST
-                type: aws
-                uri:
-                  !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${EntryLambda.Arn}/invocations
-                passthroughBehavior: NEVER
+                uri: "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:147689575901:function:AdventBot-EntryLambda-USGZJ9NQY4WC/invocations"
                 responses:
-                  "default":
+                  default:
                     statusCode: "200"
-                requestTemplates:
-                  application/x-www-form-urlencoded: |
-                    {
-                      #foreach( $token in $input.path('$').split('&') )
-                          #set( $keyVal = $token.split('=') )
-                          #set( $keyValSize = $keyVal.size() )
-                          #if( $keyValSize >= 1 )
-                              #set( $key = $util.urlDecode($keyVal[0]) )
-                              #if( $keyValSize >= 2 )
-                                  #set( $val = $util.urlDecode($keyVal[1]) )
-                              #else
-                                  #set( $val = '' )
-                              #end
-                              "$key": "$util.escapeJavaScript($val)"#if($foreach.hasNext),#end
-                          #end
-                      #end
-                    }
-        x-amazon-apigateway-policy:
-          Version: "2012-10-17"
-          Statement:
-            - Effect: "Allow"
-              Principal: "*"
-              Action:
-                - "execute-api:Invoke"
-              Resource: "execute-api:/*"
-
+                passthroughBehavior: "when_no_match"
+                httpMethod: "POST"
+                contentHandling: "CONVERT_TO_TEXT"
+                type: "aws_proxy"
+          "/random":
+            post:
+              produces:
+              - "application/json"
+              responses:
+                "200":
+                  description: "200 response"
+              x-amazon-apigateway-integration:
+                uri: "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:147689575901:function:AdventBot-EntryLambda-USGZJ9NQY4WC/invocations"
+                responses:
+                  default:
+                    statusCode: "200"
+                passthroughBehavior: "when_no_match"
+                httpMethod: "POST"
+                contentHandling: "CONVERT_TO_TEXT"
+                type: "aws_proxy"
   APIDomainName:
     Type: 'AWS::ApiGateway::DomainName'
     Properties:

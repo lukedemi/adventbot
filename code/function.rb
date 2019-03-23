@@ -1,8 +1,14 @@
+# frozen_string_literal: true
+
 ## frozen_string_literal: true
 # cd code; bundle install --without development test --path vendor/bundle; zip -r ../advent-bot.zip function.rb vendor) && aws lambda update-function-code --function-name advent-bot --zip-file fileb://advent-bot.zip
 require 'date'
 require 'json'
 require 'aws-record'
+
+require 'net/http'
+require 'uri'
+require 'cgi'
 
 VALID_DATES = (Date.new(2015, 12, 1)..Date.today).select { |d| d.month == 12 && d.day < 26 }
 VALID_DATE_STRINGS = VALID_DATES.map(&:iso8601)
@@ -16,11 +22,12 @@ class AdventBot
   configure_client client_opts
 
   string_attr :SlackOrg, hash_key: true
+  string_attr :TeamName
   list_attr   :Finished
 
   def random
     dates_left = VALID_DATE_STRINGS - self.Finished
-    return ":star: all problems completed :star:" if dates_left.length.zero?
+    return ':star: all problems completed :star:' if dates_left.length.zero?
 
     self.Finished << dates_left.sample
     selected = Date.parse(self.Finished.last)
@@ -77,7 +84,7 @@ class AdventBot
   end
 
   def help
-    'usage: /adventbot [reset|help|finish 2015-12-09]'
+    'usage: /adventbot [reset|status|help|finish 2015-12-09]'
   end
 
   private
@@ -87,32 +94,82 @@ class AdventBot
     skin_tones = [2, 3, 4, 5, 6]
     ":#{characters.sample}::skin-tone-#{skin_tones.sample}:"
   end
-
 end
 
 def lambda_handler(event:, context:)
-  response = {}
+  response = {
+    'headers' => {}
+  }
 
-  slackorg = AdventBot.find(SlackOrg: event['team_domain'])
-  unless slackorg
+  if event['path'] == '/oauth'
+    code = event.fetch('queryStringParameters', {})&.fetch('code', nil)
+    unless code
+      response['body'] = 'invalid code'
+      response['statusCode'] = 400
+      return response
+    end
+
+    params = {
+      'code' => code,
+      'client_id' => ENV['CLIENT_ID'],
+      'client_secret' => ENV['CLIENT_SECRET'],
+      'redirect_uri' => ENV['REDIRECT_URI']
+    }
+    uri = URI.parse("https://slack.com/api/oauth.access#{URI.encode_www_form(params)}")
+    slack_res = JSON.parse(Net::HTTP.get_response(uri).body)
+    unless slack_res['ok']
+      response['body'] = 'invalid code'
+      response['statusCode'] = 400
+      return response
+    end
+
+    slackorg = AdventBot.find(SlackOrg: slack_res['team_id'])
+    if slackorg
+      response['body'] = 'org already exists'
+      response['statusCode'] = 400
+      return response
+    end
+
     slackorg = AdventBot.new
-    slackorg.SlackOrg = event['team_domain']
+    slackorg.SlackOrg = slack_res['team_id']
+    slackorg.TeamName = slack_res['team_name']
     slackorg.Finished = []
     slackorg.save
+
+    response['body'] = 'subscribed, buddy!'
+    response['statusCode'] = 302
+    response['headers']['Location'] = 'https://adventbot.com'
+    response
+  else
+    team_id = CGI.parse(event['body'])['team_id'].first
+    unless team_id
+      puts "couldn't find the team id"
+      response['body'] = 'invalid slack team_id'
+      response['statusCode'] = 400
+      return response
+    end
+
+    slackorg = AdventBot.find(SlackOrg: team_id)
+    unless slackorg
+      puts 'unknown team_id'
+      response['body'] = 'unknown slack team_id. add the slack org at adventbot.com'
+      response['statusCode'] = 401
+      return response
+    end
+
+    response['body'] = case CGI.parse(event['body'])['text'].first
+                       when 'reset'
+                         slackorg.reset
+                       when 'help'
+                         slackorg.help
+                       when /^finish/
+                         slackorg.finish(event['text'])
+                       when 'status'
+                         slackorg.status
+                       else
+                         slackorg.random
+                       end
+
+    response
   end
-
-  response['text'] = case event['text']
-                     when 'reset'
-                       slackorg.reset
-                     when 'help'
-                       slackorg.help
-                     when /^finish/
-                       slackorg.finish(event['text'])
-                     when 'status'
-                       slackorg.status
-                     else
-                       slackorg.random
-                     end
-
-  response
 end
