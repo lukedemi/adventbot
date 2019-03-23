@@ -12,8 +12,21 @@ After completing 2018, we felt a bit of an emptiness - we wanted a way to contin
 
 ## Screenshots
 
+### /adventbot random
+
+<img src="./screenshots/random.png" alt="random" />
+
+### /adventbot status
+
+<img src="./screenshots/status.png" alt="status" />
 
 ## How it works
+
+Add Advent Bot to a slack channel then simply call `/adventbot` any time you want to recieve a fresh Advent of Code challenge!
+
+If you have already completed a year or two, call `/adventbot finish 2015-12-09` with any iso8601 compatible date.
+
+At any time, call `/adventbot status` to see which problems you've already completed.
 
 ## Packaging and deployment
 
