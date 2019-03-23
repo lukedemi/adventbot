@@ -2,6 +2,8 @@
 
 Advent Bot is a simple Slack Slash Command that returns a random Advent of Code problem.
 
+<a href="https://slack.com/oauth/authorize?client_id=12291972454.522961948981&scope=commands"><img alt="Add to Slack" height="40" width="139" src="https://platform.slack-edge.com/img/add_to_slack.png" srcset="https://platform.slack-edge.com/img/add_to_slack.png 1x, https://platform.slack-edge.com/img/add_to_slack@2x.png 2x" /></a>
+
 ## Why?
 
 Last holiday season, a few co-workers and I spent an hour or two (or 24) every night racing against the clock to solve that night's Advent of Code problem. If you haven't heard of [Advent of Code](https://adventofcode.com/), it's an amazing Advent Calendar of small (sometimes not so small) programing problems.
