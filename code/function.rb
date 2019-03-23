@@ -1,5 +1,3 @@
-# frozen_string_literal: true
-
 ## frozen_string_literal: true
 # cd code; bundle install --without development test --path vendor/bundle; zip -r ../advent-bot.zip function.rb vendor) && aws lambda update-function-code --function-name advent-bot --zip-file fileb://advent-bot.zip
 require 'date'
@@ -109,13 +107,7 @@ def lambda_handler(event:, context:)
       return response
     end
 
-    params = {
-      'code' => code,
-      'client_id' => ENV['CLIENT_ID'],
-      'client_secret' => ENV['CLIENT_SECRET'],
-      'redirect_uri' => ENV['REDIRECT_URI']
-    }
-    uri = URI.parse("https://slack.com/api/oauth.access#{URI.encode_www_form(params)}")
+    uri = URI.parse("https://slack.com/api/oauth.access?code=#{code}&client_id=#{ENV['CLIENT_ID']}&client_secret=#{ENV['CLIENT_SECRET']}&redirect_uri=#{ENV['REDIRECT_URI']}")
     slack_res = JSON.parse(Net::HTTP.get_response(uri).body)
     unless slack_res['ok']
       response['body'] = 'invalid code'
@@ -143,7 +135,6 @@ def lambda_handler(event:, context:)
   else
     team_id = CGI.parse(event['body'])['team_id'].first
     unless team_id
-      puts "couldn't find the team id"
       response['body'] = 'invalid slack team_id'
       response['statusCode'] = 400
       return response
@@ -151,19 +142,19 @@ def lambda_handler(event:, context:)
 
     slackorg = AdventBot.find(SlackOrg: team_id)
     unless slackorg
-      puts 'unknown team_id'
       response['body'] = 'unknown slack team_id. add the slack org at adventbot.com'
       response['statusCode'] = 401
       return response
     end
 
-    response['body'] = case CGI.parse(event['body'])['text'].first
+    event = CGI.parse(event['body'])['text'].first
+    response['body'] = case event
                        when 'reset'
                          slackorg.reset
                        when 'help'
                          slackorg.help
                        when /^finish/
-                         slackorg.finish(event['text'])
+                         slackorg.finish(event)
                        when 'status'
                          slackorg.status
                        else
@@ -173,3 +164,4 @@ def lambda_handler(event:, context:)
     response
   end
 end
+
