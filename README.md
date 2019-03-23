@@ -45,3 +45,7 @@ aws cloudformation deploy --template-file ./packaged.yaml --stack-name AdventBot
 docker run -p 8000:8000 amazon/dynamodb-local
 sam local invoke --event test_event.json
 ```
+
+## Privacy Policy
+
+Feel free to look at the code to see what this thing is actually doing, but the only things stored in the DynamoDB table are the slack team id, slack team name, and the puzzles you've completed. I will not do anything with this data (except maybe lose it at some point).
